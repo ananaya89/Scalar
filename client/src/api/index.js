@@ -14,7 +14,10 @@ async function request(url, options = {}) {
 
 // ── Boards ───────────────────────────────────────────────────────────────────
 
-export const getBoards = () => request('/boards');
+export const getBoards = async () => {
+  const data = await request('/boards');
+  return data.value || data || [];
+};
 
 export const getBoard = (id) => request(`/boards/${id}`);
 

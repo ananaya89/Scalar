@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { getActiveDatabaseProvider, initializeDatabase } from './database/index.js';
@@ -28,6 +29,14 @@ const [
 const app = express();
 const PORT = process.env.PORT || 5000;
 let startupPromise;
+
+// Vercel serves frontend assets from `public`, while local builds may still use `client/dist`.
+const publicClientPath = path.join(__dirname, 'public');
+const legacyClientDistPath = path.join(__dirname, '../client/dist');
+const clientBuildPath = fs.existsSync(path.join(publicClientPath, 'index.html'))
+  ? publicClientPath
+  : legacyClientDistPath;
+const clientIndexPath = path.join(clientBuildPath, 'index.html');
 
 function ensureStartup() {
   if (!startupPromise) {
@@ -58,13 +67,21 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Serve static files from the compiled frontend
-const clientDistPath = path.join(__dirname, '../client/dist');
-app.use(express.static(clientDistPath));
+if (fs.existsSync(clientBuildPath)) {
+  app.use(express.static(clientBuildPath));
+}
 
 // SPA fallback: serve index.html for all non-API routes
-app.get('*', (req, res) => {
-  res.sendFile(path.join(clientDistPath, 'index.html'));
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api')) {
+    return next();
+  }
+
+  if (!fs.existsSync(clientIndexPath)) {
+    return res.status(404).json({ error: 'Frontend build not found' });
+  }
+
+  res.sendFile(clientIndexPath);
 });
 
 app.use((err, req, res, next) => {
