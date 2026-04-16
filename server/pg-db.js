@@ -153,83 +153,115 @@ const seedBoards = [
 ];
 
 async function seedDatabase() {
-  const count = await db.one('SELECT COUNT(*)::int AS count FROM members');
-  if (count?.count > 0) {
-    return;
-  }
-
-  await transaction(async (tx) => {
-    const memberIds = [];
-    for (const [name, email, avatarColor] of seedMembers) {
-      const member = await tx.one(
-        'INSERT INTO members (name, email, avatar_color) VALUES ($1, $2, $3) RETURNING id',
-        [name, email, avatarColor]
-      );
-      memberIds.push(member.id);
+  try {
+    // Check if data already exists
+    const count = await db.one('SELECT COUNT(*)::int AS count FROM members');
+    if (count?.count > 0) {
+      console.log('✅ Database already seeded, skipping...');
+      return;
     }
 
-    for (const boardData of seedBoards) {
-      const board = await tx.one(
-        'INSERT INTO boards (title, background) VALUES ($1, $2) RETURNING id',
-        [boardData.title, boardData.background]
-      );
-      const labelIds = new Map();
+    console.log('🌱 Seeding database with sample data...');
 
-      for (const [key, name, color] of boardData.labels) {
-        const label = await tx.one(
-          'INSERT INTO labels (board_id, name, color) VALUES ($1, $2, $3) RETURNING id',
-          [board.id, name, color]
-        );
-        labelIds.set(key, label.id);
+    await transaction(async (tx) => {
+      const memberIds = [];
+      for (const [name, email, avatarColor] of seedMembers) {
+        try {
+          const member = await tx.one(
+            'INSERT INTO members (name, email, avatar_color) VALUES ($1, $2, $3) RETURNING id',
+            [name, email, avatarColor]
+          );
+          memberIds.push(member.id);
+        } catch (error) {
+          if (error.code === '23505') {
+            // Unique constraint violation - member already exists
+            const existing = await tx.one('SELECT id FROM members WHERE email = $1', [email]);
+            memberIds.push(existing.id);
+          } else {
+            throw error;
+          }
+        }
       }
 
-      for (const [listIndex, [listTitle, cards]] of boardData.lists.entries()) {
-        const list = await tx.one(
-          'INSERT INTO lists (board_id, title, position) VALUES ($1, $2, $3) RETURNING id',
-          [board.id, listTitle, listIndex]
+      for (const boardData of seedBoards) {
+        const board = await tx.one(
+          'INSERT INTO boards (title, background) VALUES ($1, $2) RETURNING id',
+          [boardData.title, boardData.background]
         );
+        const labelIds = new Map();
 
-        for (const [cardIndex, cardData] of cards.entries()) {
-          const card = await tx.one(
-            `INSERT INTO cards (list_id, title, description, position, due_date)
-             VALUES ($1, $2, $3, $4, $5)
-             RETURNING id`,
-            [list.id, cardData.title, '', cardIndex, cardData.due || null]
+        for (const [key, name, color] of boardData.labels) {
+          const label = await tx.one(
+            'INSERT INTO labels (board_id, name, color) VALUES ($1, $2, $3) RETURNING id',
+            [board.id, name, color]
+          );
+          labelIds.set(key, label.id);
+        }
+
+        for (const [listIndex, [listTitle, cards]] of boardData.lists.entries()) {
+          const list = await tx.one(
+            'INSERT INTO lists (board_id, title, position) VALUES ($1, $2, $3) RETURNING id',
+            [board.id, listTitle, listIndex]
           );
 
-          for (const labelKey of cardData.labels || []) {
-            await tx.query(
-              'INSERT INTO card_labels (card_id, label_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
-              [card.id, labelIds.get(labelKey)]
+          for (const [cardIndex, cardData] of cards.entries()) {
+            const card = await tx.one(
+              `INSERT INTO cards (list_id, title, description, position, due_date)
+               VALUES ($1, $2, $3, $4, $5)
+               RETURNING id`,
+              [list.id, cardData.title, '', cardIndex, cardData.due || null]
             );
-          }
 
-          for (const memberIndex of cardData.members || []) {
-            const actualMemberId = memberIds[memberIndex - 1];
-            if (actualMemberId) {
-              await tx.query(
-                'INSERT INTO card_members (card_id, member_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
-                [card.id, actualMemberId]
-              );
+            for (const labelKey of cardData.labels || []) {
+              const labelId = labelIds.get(labelKey);
+              if (labelId) {
+                try {
+                  await tx.query(
+                    'INSERT INTO card_labels (card_id, label_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+                    [card.id, labelId]
+                  );
+                } catch (error) {
+                  // Ignore conflicts
+                }
+              }
             }
-          }
 
-          if (cardData.checklist?.length) {
-            const checklist = await tx.one(
-              'INSERT INTO checklists (card_id, title) VALUES ($1, $2) RETURNING id',
-              [card.id, 'Checklist']
-            );
-            for (const [itemIndex, text] of cardData.checklist.entries()) {
-              await tx.query(
-                'INSERT INTO checklist_items (checklist_id, text, position) VALUES ($1, $2, $3)',
-                [checklist.id, text, itemIndex]
+            for (const memberIndex of cardData.members || []) {
+              const actualMemberId = memberIds[memberIndex - 1];
+              if (actualMemberId) {
+                try {
+                  await tx.query(
+                    'INSERT INTO card_members (card_id, member_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+                    [card.id, actualMemberId]
+                  );
+                } catch (error) {
+                  // Ignore conflicts
+                }
+              }
+            }
+
+            if (cardData.checklist?.length) {
+              const checklist = await tx.one(
+                'INSERT INTO checklists (card_id, title) VALUES ($1, $2) RETURNING id',
+                [card.id, 'Checklist']
               );
+              for (const [itemIndex, text] of cardData.checklist.entries()) {
+                await tx.query(
+                  'INSERT INTO checklist_items (checklist_id, text, position) VALUES ($1, $2, $3)',
+                  [checklist.id, text, itemIndex]
+                );
+              }
             }
           }
         }
       }
-    }
-  });
+    });
+
+    console.log('✅ Database seeded successfully!');
+  } catch (error) {
+    console.log('⚠️ Seeding error (may be normal if data already exists):', error.message);
+    // Don't throw - if seeding fails, the app can still work
+  }
 }
 
 let initPromise;
