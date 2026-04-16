@@ -1,14 +1,23 @@
 import { Pool } from 'pg';
 
 const globalForDb = globalThis;
-const connectionString =
+const rawConnectionString =
   process.env.DATABASE_URL ||
   process.env.POSTGRES_URL ||
   process.env.POSTGRES_PRISMA_URL;
 
-if (!connectionString) {
+if (!rawConnectionString) {
   throw new Error('Set DATABASE_URL or POSTGRES_URL before starting the server.');
 }
+
+const connectionUrl = new URL(rawConnectionString);
+const usesRequireSsl = connectionUrl.searchParams.get('sslmode') === 'require';
+
+if (usesRequireSsl && !connectionUrl.searchParams.has('uselibpqcompat')) {
+  connectionUrl.searchParams.set('uselibpqcompat', 'true');
+}
+
+const connectionString = connectionUrl.toString();
 
 const ssl =
   process.env.PGSSLMODE === 'disable' || connectionString.includes('sslmode=disable')

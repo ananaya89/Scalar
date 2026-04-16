@@ -10,9 +10,11 @@ async function request(url, options = {}) {
       ...options,
     });
   } catch (error) {
-    throw new Error(
+    const requestError = new Error(
       `Cannot reach ${endpoint}. Check your backend deployment and VITE_API_BASE.`
     );
+    requestError.cause = error;
+    throw requestError;
   }
 
   const contentType = res.headers.get('content-type') || '';
@@ -20,11 +22,15 @@ async function request(url, options = {}) {
   if (!res.ok) {
     if (contentType.includes('application/json')) {
       const error = await res.json().catch(() => ({ error: 'Request failed' }));
-      throw new Error(error.error || 'Request failed');
+      const requestError = new Error(error.error || 'Request failed');
+      requestError.status = res.status;
+      throw requestError;
     }
 
     const text = await res.text().catch(() => '');
-    throw new Error(text || `Request failed (${res.status})`);
+    const requestError = new Error(text || `Request failed (${res.status})`);
+    requestError.status = res.status;
+    throw requestError;
   }
 
   if (!contentType.includes('application/json')) {
@@ -32,12 +38,18 @@ async function request(url, options = {}) {
     const looksLikeHtml = /^\s*</.test(text);
 
     if (looksLikeHtml) {
-      throw new Error(
+      const requestError = new Error(
         `Expected JSON from ${endpoint}, but received HTML. Open the server deployment URL or set VITE_API_BASE to your backend /api URL.`
       );
+      requestError.status = res.status;
+      throw requestError;
     }
 
-    throw new Error(`Expected JSON from ${endpoint}, but received ${contentType || 'an unknown response type'}.`);
+    const requestError = new Error(
+      `Expected JSON from ${endpoint}, but received ${contentType || 'an unknown response type'}.`
+    );
+    requestError.status = res.status;
+    throw requestError;
   }
 
   return res.json();

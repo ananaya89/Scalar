@@ -36,6 +36,7 @@ export default function BoardPage() {
   const [board, setBoard] = useState(null);
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [selectedCardId, setSelectedCardId] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
@@ -45,16 +46,30 @@ export default function BoardPage() {
   const [favoriteBoardIds, setFavoriteBoardIds] = useState(() => getFavoriteBoardIds());
 
   const loadBoard = useCallback(async () => {
+    setLoading(true);
+    setLoadError('');
+
     try {
-      const [boardData, membersData] = await Promise.all([
-        api.getBoard(boardId),
-        api.getMembers(),
-      ]);
+      const boardData = await api.getBoard(boardId);
       setBoard(boardData);
-      setMembers(membersData);
       setTitleValue(boardData.title);
+
+      try {
+        const membersData = await api.getMembers();
+        setMembers(membersData);
+      } catch (err) {
+        console.error('Failed to load members:', err);
+        setMembers([]);
+      }
     } catch (err) {
       console.error('Failed to load board:', err);
+      setBoard(null);
+      setMembers([]);
+      setLoadError(
+        err?.status === 404
+          ? 'Board not found.'
+          : err?.message || 'Unable to load this board right now.'
+      );
     } finally {
       setLoading(false);
     }
@@ -303,7 +318,7 @@ export default function BoardPage() {
           </div>
         </header>
         <div className="loading-shell">
-          <div className="loading-spinner">Board not found.</div>
+          <div className="loading-spinner">{loadError || 'Board not found.'}</div>
         </div>
       </div>
     );
