@@ -159,11 +159,13 @@ async function seedDatabase() {
   }
 
   await transaction(async (tx) => {
+    const memberIds = [];
     for (const [name, email, avatarColor] of seedMembers) {
-      await tx.query(
-        'INSERT INTO members (name, email, avatar_color) VALUES ($1, $2, $3)',
+      const member = await tx.one(
+        'INSERT INTO members (name, email, avatar_color) VALUES ($1, $2, $3) RETURNING id',
         [name, email, avatarColor]
       );
+      memberIds.push(member.id);
     }
 
     for (const boardData of seedBoards) {
@@ -202,11 +204,14 @@ async function seedDatabase() {
             );
           }
 
-          for (const memberId of cardData.members || []) {
-            await tx.query(
-              'INSERT INTO card_members (card_id, member_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
-              [card.id, memberId]
-            );
+          for (const memberIndex of cardData.members || []) {
+            const actualMemberId = memberIds[memberIndex - 1];
+            if (actualMemberId) {
+              await tx.query(
+                'INSERT INTO card_members (card_id, member_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+                [card.id, actualMemberId]
+              );
+            }
           }
 
           if (cardData.checklist?.length) {
