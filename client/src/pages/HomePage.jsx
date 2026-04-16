@@ -130,7 +130,7 @@ export default function HomePage() {
       })
       .catch(err => {
         console.error('Failed to load boards:', err);
-        setErrorMessage('Unable to load boards right now.');
+        setErrorMessage(err.message || 'Unable to load boards right now.');
       })
       .finally(() => setLoading(false));
   }, []);
@@ -203,7 +203,7 @@ export default function HomePage() {
       navigate(`/board/${board.id}`);
     } catch (err) {
       console.error('Failed to create board:', err);
-      setErrorMessage('Board creation failed. Try again.');
+      setErrorMessage(err.message || 'Board creation failed. Try again.');
     }
   };
 
@@ -225,7 +225,7 @@ export default function HomePage() {
       navigate(`/board/${board.id}`);
     } catch (err) {
       console.error('Failed to use template:', err);
-      setErrorMessage('Template setup failed. Try again.');
+      setErrorMessage(err.message || 'Template setup failed. Try again.');
     } finally {
       setCreatingTemplateId(null);
     }

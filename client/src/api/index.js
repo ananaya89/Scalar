@@ -1,14 +1,45 @@
 const API_BASE = (import.meta.env.VITE_API_BASE || '/api').replace(/\/$/, '');
 
 async function request(url, options = {}) {
-  const res = await fetch(`${API_BASE}${url}`, {
-    headers: { 'Content-Type': 'application/json' },
-    ...options,
-  });
-  if (!res.ok) {
-    const error = await res.json().catch(() => ({ error: 'Request failed' }));
-    throw new Error(error.error || 'Request failed');
+  const endpoint = `${API_BASE}${url}`;
+  let res;
+
+  try {
+    res = await fetch(endpoint, {
+      headers: { 'Content-Type': 'application/json' },
+      ...options,
+    });
+  } catch (error) {
+    throw new Error(
+      `Cannot reach ${endpoint}. Check your backend deployment and VITE_API_BASE.`
+    );
   }
+
+  const contentType = res.headers.get('content-type') || '';
+
+  if (!res.ok) {
+    if (contentType.includes('application/json')) {
+      const error = await res.json().catch(() => ({ error: 'Request failed' }));
+      throw new Error(error.error || 'Request failed');
+    }
+
+    const text = await res.text().catch(() => '');
+    throw new Error(text || `Request failed (${res.status})`);
+  }
+
+  if (!contentType.includes('application/json')) {
+    const text = await res.text().catch(() => '');
+    const looksLikeHtml = /^\s*</.test(text);
+
+    if (looksLikeHtml) {
+      throw new Error(
+        `Expected JSON from ${endpoint}, but received HTML. Open the server deployment URL or set VITE_API_BASE to your backend /api URL.`
+      );
+    }
+
+    throw new Error(`Expected JSON from ${endpoint}, but received ${contentType || 'an unknown response type'}.`);
+  }
+
   return res.json();
 }
 
