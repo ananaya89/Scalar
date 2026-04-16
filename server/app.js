@@ -1,7 +1,12 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { getActiveDatabaseProvider, initializeDatabase } from './database/index.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const provider = getActiveDatabaseProvider();
 const routeSet = provider === 'mongodb' ? 'routes-mongo' : 'routes-pg';
@@ -51,6 +56,15 @@ app.get('/api/health', (req, res) => {
     routes: routeSet,
     timestamp: new Date().toISOString(),
   });
+});
+
+// Serve static files from the compiled frontend
+const clientDistPath = path.join(__dirname, '../client/dist');
+app.use(express.static(clientDistPath));
+
+// SPA fallback: serve index.html for all non-API routes
+app.get('*', (req, res) => {
+  res.sendFile(path.join(clientDistPath, 'index.html'));
 });
 
 app.use((err, req, res, next) => {
