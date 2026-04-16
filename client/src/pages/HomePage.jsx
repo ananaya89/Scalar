@@ -8,6 +8,7 @@ import {
   getFavoriteBoardIds,
   getRecentBoards,
   rememberRecentBoard,
+  syncStoredBoardsWithLiveBoards,
   toggleFavoriteBoardId,
 } from '../utils/ui.js';
 import {
@@ -126,7 +127,9 @@ export default function HomePage() {
     api.getBoards()
       .then(data => {
         setBoards(data);
-        setRecentBoards(getRecentBoards());
+        const syncedStorage = syncStoredBoardsWithLiveBoards(data);
+        setFavoriteBoardIds(syncedStorage.favoriteBoardIds);
+        setRecentBoards(syncedStorage.recentBoards);
       })
       .catch(err => {
         console.error('Failed to load boards:', err);
@@ -162,16 +165,19 @@ export default function HomePage() {
   const mergedRecentBoards = recentBoards
     .map(recent => {
       const liveBoard = boards.find(board => board.id === recent.id);
-      return liveBoard
-        ? {
-            ...recent,
-            title: liveBoard.title,
-            background: liveBoard.background,
-            listCount: liveBoard.list_count || 0,
-            cardCount: liveBoard.card_count || 0,
-          }
-        : recent;
+      if (!liveBoard) {
+        return null;
+      }
+
+      return {
+        ...recent,
+        title: liveBoard.title,
+        background: liveBoard.background,
+        listCount: liveBoard.list_count || 0,
+        cardCount: liveBoard.card_count || 0,
+      };
     })
+    .filter(Boolean)
     .filter((item, index, all) => all.findIndex(board => board.id === item.id) === index)
     .slice(0, 4);
 

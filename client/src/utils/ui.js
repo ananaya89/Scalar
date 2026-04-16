@@ -109,6 +109,12 @@ export function getFavoriteBoardIds() {
   return Array.isArray(ids) ? ids : [];
 }
 
+export function setFavoriteBoardIds(boardIds) {
+  const nextIds = Array.isArray(boardIds) ? boardIds : [];
+  writeStorage(STORAGE_KEYS.favorites, nextIds);
+  return nextIds;
+}
+
 export function toggleFavoriteBoardId(boardId) {
   const ids = getFavoriteBoardIds();
   const nextIds = ids.includes(boardId)
@@ -122,6 +128,12 @@ export function toggleFavoriteBoardId(boardId) {
 export function getRecentBoards() {
   const boards = readStorage(STORAGE_KEYS.recentBoards, []);
   return Array.isArray(boards) ? boards : [];
+}
+
+export function setRecentBoardsStorage(boards) {
+  const nextBoards = Array.isArray(boards) ? boards : [];
+  writeStorage(STORAGE_KEYS.recentBoards, nextBoards);
+  return nextBoards;
 }
 
 export function rememberRecentBoard(board) {
@@ -145,4 +157,19 @@ export function rememberRecentBoard(board) {
 
   writeStorage(STORAGE_KEYS.recentBoards, nextBoards);
   return nextBoards;
+}
+
+export function syncStoredBoardsWithLiveBoards(liveBoards) {
+  const liveBoardIds = new Set((liveBoards || []).map(board => board.id));
+
+  const syncedFavorites = getFavoriteBoardIds().filter(id => liveBoardIds.has(id));
+  const syncedRecentBoards = getRecentBoards().filter(board => liveBoardIds.has(board.id));
+
+  setFavoriteBoardIds(syncedFavorites);
+  setRecentBoardsStorage(syncedRecentBoards);
+
+  return {
+    favoriteBoardIds: syncedFavorites,
+    recentBoards: syncedRecentBoards,
+  };
 }
