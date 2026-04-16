@@ -11,6 +11,7 @@ yarn.lock
 # Build output
 dist/
 build/
+public/
 server/public/
 
 # IDE

@@ -30,12 +30,16 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 let startupPromise;
 
-// Vercel serves frontend assets from `public`, while local builds may still use `client/dist`.
+// Support both deployment shapes:
+// 1. Vercel project rooted at `/server` -> assets in `server/public`
+// 2. Vercel project rooted at repo root -> assets in `/public`
+const rootPublicClientPath = path.join(__dirname, '../public');
 const publicClientPath = path.join(__dirname, 'public');
 const legacyClientDistPath = path.join(__dirname, '../client/dist');
-const clientBuildPath = fs.existsSync(path.join(publicClientPath, 'index.html'))
-  ? publicClientPath
-  : legacyClientDistPath;
+const clientBuildPath =
+  [rootPublicClientPath, publicClientPath, legacyClientDistPath].find((candidatePath) =>
+    fs.existsSync(path.join(candidatePath, 'index.html'))
+  ) || legacyClientDistPath;
 const clientIndexPath = path.join(clientBuildPath, 'index.html');
 
 function ensureStartup() {
